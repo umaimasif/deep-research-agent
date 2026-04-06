@@ -1,10 +1,7 @@
-import os
 from typing import AsyncGenerator
-from groq import AsyncGroq
+from .groq_client import stream_chat
 
-
-def get_client():
-    return AsyncGroq(api_key=os.environ.get("GROQ_API_KEY"))
+MODEL = "llama-3.3-70b-versatile"
 
 SYSTEM_PROMPT = """You are an expert research writer. Write a comprehensive, well-structured report
 based on the research findings provided.
@@ -16,7 +13,7 @@ Format the report using Markdown with these sections:
 ## Analysis & Insights
 ## Conclusion
 
-Be thorough, insightful, and use clear language. Cite specific findings where relevant."""
+Be thorough, insightful, and use clear language."""
 
 
 async def synthesize_report(
@@ -28,8 +25,7 @@ async def synthesize_report(
     )
     quality_note = critique.get("summary", "")
 
-    stream = await get_client().chat.completions.create(
-        model="llama-3.3-70b-versatile",
+    async for chunk in stream_chat(
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {
@@ -41,12 +37,8 @@ async def synthesize_report(
                 ),
             },
         ],
+        model=MODEL,
         temperature=0.4,
         max_tokens=2000,
-        stream=True,
-    )
-
-    async for chunk in stream:
-        delta = chunk.choices[0].delta.content
-        if delta:
-            yield delta
+    ):
+        yield chunk

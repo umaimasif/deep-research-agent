@@ -1,10 +1,7 @@
 import json
-import os
-from groq import AsyncGroq
+from .groq_client import chat
 
-
-def get_client():
-    return AsyncGroq(api_key=os.environ.get("GROQ_API_KEY"))
+MODEL = "llama-3.3-70b-versatile"
 
 SYSTEM_PROMPT = """You are a critical research reviewer. Evaluate whether the research findings
 adequately answer the original query.
@@ -22,9 +19,7 @@ async def critique_findings(query: str, findings: list[dict]) -> dict:
         [f"Sub-task {f['task_id']}: {f['task']}\n\nFinding:\n{f['finding']}"
          for f in findings]
     )
-
-    response = await get_client().chat.completions.create(
-        model="llama-3.3-70b-versatile",
+    content = await chat(
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {
@@ -32,8 +27,9 @@ async def critique_findings(query: str, findings: list[dict]) -> dict:
                 "content": f"Original Query: {query}\n\nResearch Findings:\n{findings_text}",
             },
         ],
+        model=MODEL,
         response_format={"type": "json_object"},
         temperature=0.2,
         max_tokens=400,
     )
-    return json.loads(response.choices[0].message.content)
+    return json.loads(content)
