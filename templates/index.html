@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deep Research Agent</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+  <div class="app">
+
+    <!-- ── Header ── -->
+    <header class="header">
+      <div class="logo">
+        <span class="logo-icon">⬡</span>
+        <span class="logo-text">Deep Research Agent</span>
+        <span class="logo-badge">Multi-Agent AI</span>
+      </div>
+      <div class="search-bar">
+        <input
+          id="query-input"
+          type="text"
+          placeholder="Ask anything… e.g. 'How does AlphaFold work and what has it discovered?'"
+          autocomplete="off"
+        />
+        <button id="run-btn" onclick="startResearch()">
+          <span id="btn-text">Research</span>
+          <span id="btn-spinner" class="spinner hidden"></span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ── Main layout ── -->
+    <div class="main">
+
+      <!-- Left: Pipeline panel -->
+      <aside class="pipeline-panel">
+        <h2 class="panel-title">Agent Pipeline</h2>
+
+        <div id="pipeline-steps">
+          <div class="agent-card idle" id="card-Planner">
+            <div class="agent-icon">🧠</div>
+            <div class="agent-info">
+              <div class="agent-name">Planner</div>
+              <div class="agent-desc">Breaks query into sub-tasks</div>
+              <div class="agent-status" id="status-Planner">Waiting...</div>
+            </div>
+            <div class="agent-badge" id="badge-Planner"></div>
+          </div>
+
+          <div class="connector"></div>
+
+          <div class="agent-card idle" id="card-Workers">
+            <div class="agent-icon">⚙️</div>
+            <div class="agent-info">
+              <div class="agent-name">Workers</div>
+              <div class="agent-desc">Parallel web + wiki research</div>
+              <div class="agent-status" id="status-Workers">Waiting...</div>
+            </div>
+            <div class="agent-badge" id="badge-Workers"></div>
+          </div>
+
+          <div id="task-list" class="task-list"></div>
+
+          <div class="connector"></div>
+
+          <div class="agent-card idle" id="card-Critic">
+            <div class="agent-icon">🔍</div>
+            <div class="agent-info">
+              <div class="agent-name">Critic</div>
+              <div class="agent-desc">Validates quality & gaps</div>
+              <div class="agent-status" id="status-Critic">Waiting...</div>
+            </div>
+            <div class="agent-badge" id="badge-Critic"></div>
+          </div>
+
+          <div class="connector"></div>
+
+          <div class="agent-card idle" id="card-Synthesizer">
+            <div class="agent-icon">✍️</div>
+            <div class="agent-info">
+              <div class="agent-name">Synthesizer</div>
+              <div class="agent-desc">Writes the final report</div>
+              <div class="agent-status" id="status-Synthesizer">Waiting...</div>
+            </div>
+            <div class="agent-badge" id="badge-Synthesizer"></div>
+          </div>
+        </div>
+
+        <!-- Sources -->
+        <div id="sources-section" class="sources-section hidden">
+          <h3 class="sources-title">Sources</h3>
+          <ul id="sources-list" class="sources-list"></ul>
+        </div>
+      </aside>
+
+      <!-- Right: Report panel -->
+      <section class="report-panel">
+        <div id="empty-state" class="empty-state">
+          <div class="empty-icon">⬡</div>
+          <p>Enter a query above to start a deep research session.</p>
+          <div class="example-queries">
+            <span onclick="setQuery(this)">How does CRISPR gene editing work?</span>
+            <span onclick="setQuery(this)">What is quantum computing and its current progress?</span>
+            <span onclick="setQuery(this)">Explain the architecture of large language models</span>
+            <span onclick="setQuery(this)">What caused the 2008 financial crisis?</span>
+          </div>
+        </div>
+
+        <div id="report-container" class="report-container hidden">
+          <div id="report-content" class="report-content"></div>
+          <div id="report-cursor" class="cursor hidden">▌</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    let reportBuffer = "";
+    let renderTimer = null;
+
+    function setQuery(el) {
+      document.getElementById("query-input").value = el.textContent;
+      document.getElementById("query-input").focus();
+    }
+
+    function setAgentState(agent, state, message) {
+      const card = document.getElementById(`card-${agent}`);
+      const status = document.getElementById(`status-${agent}`);
+      const badge = document.getElementById(`badge-${agent}`);
+      if (!card) return;
+
+      card.classList.remove("idle", "running", "complete", "error");
+      card.classList.add(state);
+
+      if (message) status.textContent = message;
+      if (state === "running") badge.innerHTML = '<span class="pulse-dot"></span>';
+      else if (state === "complete") badge.innerHTML = '<span class="check">✓</span>';
+      else if (state === "error") badge.innerHTML = '<span class="err-x">✗</span>';
+      else badge.innerHTML = "";
+    }
+
+    function addTaskItem(taskId, message) {
+      const list = document.getElementById("task-list");
+      const item = document.createElement("div");
+      item.className = "task-item running";
+      item.id = `task-${taskId}`;
+      item.innerHTML = `<span class="task-dot"></span><span class="task-text">${escHtml(message)}</span>`;
+      list.appendChild(item);
+    }
+
+    function completeTaskItem(taskId) {
+      const item = document.getElementById(`task-${taskId}`);
+      if (item) {
+        item.classList.remove("running");
+        item.classList.add("done");
+        item.querySelector(".task-dot").textContent = "✓";
+      }
+    }
+
+    function escHtml(s) {
+      return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    function renderReport() {
+      const el = document.getElementById("report-content");
+      el.innerHTML = marked.parse(reportBuffer);
+    }
+
+    async function startResearch() {
+      const query = document.getElementById("query-input").value.trim();
+      if (!query) return;
+
+      // Reset UI
+      reportBuffer = "";
+      document.getElementById("report-content").innerHTML = "";
+      document.getElementById("task-list").innerHTML = "";
+      document.getElementById("sources-list").innerHTML = "";
+      document.getElementById("sources-section").classList.add("hidden");
+      document.getElementById("empty-state").classList.add("hidden");
+      document.getElementById("report-container").classList.remove("hidden");
+      document.getElementById("report-cursor").classList.remove("hidden");
+
+      ["Planner","Workers","Critic","Synthesizer"].forEach(a => setAgentState(a, "idle", "Waiting..."));
+
+      const btn = document.getElementById("run-btn");
+      btn.disabled = true;
+      document.getElementById("btn-text").textContent = "Running...";
+      document.getElementById("btn-spinner").classList.remove("hidden");
+
+      try {
+        const resp = await fetch("/research", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query }),
+        });
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const raw = line.slice(6).trim();
+            if (raw === "[DONE]") break;
+
+            let event;
+            try { event = JSON.parse(raw); } catch { continue; }
+            handleEvent(event);
+          }
+        }
+      } catch (err) {
+        document.getElementById("report-content").innerHTML =
+          `<p style="color:#ff6b6b">Error: ${escHtml(err.message)}</p>`;
+      }
+
+      btn.disabled = false;
+      document.getElementById("btn-text").textContent = "Research";
+      document.getElementById("btn-spinner").classList.add("hidden");
+      document.getElementById("report-cursor").classList.add("hidden");
+    }
+
+    function handleEvent(ev) {
+      switch (ev.type) {
+
+        case "step":
+          if (ev.status === "start")
+            setAgentState(ev.agent, "running", ev.message);
+          else if (ev.status === "complete") {
+            setAgentState(ev.agent, "complete", ev.message);
+            // Mark all task items done when Workers complete
+            if (ev.agent === "Workers" && ev.data) {
+              ev.data.forEach(t => completeTaskItem(t.task_id));
+            }
+          }
+          break;
+
+        case "task_start":
+          addTaskItem(ev.task_id, ev.message);
+          break;
+
+        case "report_start":
+          reportBuffer = "";
+          break;
+
+        case "report_chunk":
+          reportBuffer += ev.content;
+          clearTimeout(renderTimer);
+          renderTimer = setTimeout(renderReport, 40);
+          break;
+
+        case "report_end":
+          renderReport();
+          if (ev.sources && ev.sources.length) {
+            showSources(ev.sources);
+          }
+          break;
+
+        case "error":
+          document.getElementById("report-content").innerHTML +=
+            `<p style="color:#ff6b6b"><strong>Error:</strong> ${escHtml(ev.message)}</p>`;
+          break;
+      }
+    }
+
+    function showSources(sources) {
+      const list = document.getElementById("sources-list");
+      const seen = new Set();
+      sources.forEach(s => {
+        if (!s.url || seen.has(s.url)) return;
+        seen.add(s.url);
+        const li = document.createElement("li");
+        li.innerHTML = `<a href="${escHtml(s.url)}" target="_blank">${escHtml(s.title || s.url)}</a>`;
+        list.appendChild(li);
+      });
+      document.getElementById("sources-section").classList.remove("hidden");
+    }
+
+    // Allow Enter key to trigger search
+    document.getElementById("query-input").addEventListener("keydown", e => {
+      if (e.key === "Enter") startResearch();
+    });
+  </script>
+
+</body>
+</html>
