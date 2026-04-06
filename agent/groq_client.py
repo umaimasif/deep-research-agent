@@ -12,7 +12,7 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 def _headers() -> dict:
     return {
-        "Authorization": f"Bearer {os.environ.get('GROQ_API_KEY', '')}",
+        "Authorization": f"Bearer {os.environ.get('GROQ_API_KEY', '').strip()}",
         "Content-Type": "application/json",
     }
 
