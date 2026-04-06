@@ -2,7 +2,9 @@ import os
 from typing import AsyncGenerator
 from groq import AsyncGroq
 
-client = AsyncGroq(api_key=os.environ.get("GROQ_API_KEY"))
+
+def get_client():
+    return AsyncGroq(api_key=os.environ.get("GROQ_API_KEY"))
 
 SYSTEM_PROMPT = """You are an expert research writer. Write a comprehensive, well-structured report
 based on the research findings provided.
@@ -26,7 +28,7 @@ async def synthesize_report(
     )
     quality_note = critique.get("summary", "")
 
-    stream = await client.chat.completions.create(
+    stream = await get_client().chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},

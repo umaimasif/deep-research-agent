@@ -2,7 +2,9 @@ import os
 from groq import AsyncGroq
 from .tools import web_search, wikipedia_search
 
-client = AsyncGroq(api_key=os.environ.get("GROQ_API_KEY"))
+
+def get_client():
+    return AsyncGroq(api_key=os.environ.get("GROQ_API_KEY"))
 
 
 async def execute_task(task: dict) -> dict:
@@ -23,7 +25,7 @@ async def execute_task(task: dict) -> dict:
         )
         sources = [{"title": r["title"], "url": r["url"]} for r in results if r["url"]]
 
-    response = await client.chat.completions.create(
+    response = await get_client().chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[
             {

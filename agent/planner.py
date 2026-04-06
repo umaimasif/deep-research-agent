@@ -2,7 +2,9 @@ import json
 import os
 from groq import AsyncGroq
 
-client = AsyncGroq(api_key=os.environ.get("GROQ_API_KEY"))
+
+def get_client():
+    return AsyncGroq(api_key=os.environ.get("GROQ_API_KEY"))
 
 SYSTEM_PROMPT = """You are a research planner. Break the user's query into 3-5 focused sub-tasks.
 Each sub-task should be a specific question answerable by searching the web or Wikipedia.
@@ -23,7 +25,7 @@ Example:
 
 
 async def plan_research(query: str) -> list[dict]:
-    response = await client.chat.completions.create(
+    response = await get_client().chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
