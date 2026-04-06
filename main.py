@@ -23,7 +23,11 @@ from pydantic import BaseModel
 from agent.pipeline import run_agent_pipeline
 
 app = FastAPI(title="Deep Research Agent")
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+_static_dir = BASE_DIR / "static"
+if _static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
